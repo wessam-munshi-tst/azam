@@ -26,12 +26,12 @@
         </svg>
     </button>
 
-    <div class="container" id="mainContainer">
+    <div class="container">
         <main>
             <div class="logo-container">
-              
-                <img src="/static/az.jpg" alt="Logo" class="logo" width="2000" height="2000">
-            
+
+                <img src="/static/sm.png" alt="Logo" class="logo" width="2000" height="2000">
+
 
             </div>
 
@@ -77,9 +77,8 @@
     <script>
         // ====== Visitor Survey Logic ======
         // The site (and the audio chatbot session) works completely normally;
-        // this card simply appears a few seconds after the page loads -
-        // while the chatbot is running - to ask the visitor for their info,
-        // then thanks them and quietly disappears, without blocking anything.
+        // this card appears repeatedly over time so many different visitors
+        // using the same device/session can each fill it in and be thanked.
         (function () {
             const cardEl = document.getElementById('surveyCard');
             const formEl = document.getElementById('surveyForm');
@@ -92,12 +91,31 @@
             const phoneInput = document.getElementById('surveyPhone');
             const emailInput = document.getElementById('surveyEmail');
 
+            const FIRST_APPEARANCE_DELAY = 6000;   // first time, shortly after the page loads
+            const REAPPEAR_DELAY = 20000;          // how long to wait before asking the next visitor
+            const THANKS_DISPLAY_TIME = 3500;      // how long the thank-you message stays visible
+
+            function resetFormForNextVisitor() {
+                formEl.reset();
+                errorEl.style.display = 'none';
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'إرسال';
+                promptRow.style.display = 'flex';
+                formEl.style.display = 'block';
+                thanksEl.style.display = 'none';
+            }
+
             function showCard() {
+                resetFormForNextVisitor();
                 cardEl.style.display = 'block';
                 requestAnimationFrame(() => {
                     cardEl.style.opacity = '1';
                     cardEl.style.transform = 'translateX(-50%) translateY(0)';
                 });
+            }
+
+            function scheduleNextAppearance(delay) {
+                setTimeout(showCard, delay);
             }
 
             function hideCard() {
@@ -106,22 +124,19 @@
                 setTimeout(() => { cardEl.style.display = 'none'; }, 400);
             }
 
+            // Kick off the recurring cycle.
+            scheduleNextAppearance(FIRST_APPEARANCE_DELAY);
+
             function showError(msg) {
                 errorEl.textContent = msg;
                 errorEl.style.display = 'block';
             }
 
-            let alreadyDone = false;
-            try {
-                alreadyDone = localStorage.getItem('visitorSurveyDone') === '1';
-            } catch (e) {}
-
-            if (!alreadyDone) {
-                // Give the chatbot a moment to greet the visitor first.
-                setTimeout(showCard, 6000);
-            }
-
-            dismissBtn.addEventListener('click', hideCard);
+            dismissBtn.addEventListener('click', function () {
+                hideCard();
+                // Still come back later to catch the next visitor.
+                scheduleNextAppearance(REAPPEAR_DELAY);
+            });
 
             formEl.addEventListener('submit', async function (e) {
                 e.preventDefault();
@@ -153,12 +168,14 @@
                     const data = await res.json();
 
                     if (res.ok && data.status === 'ok') {
-                        try { localStorage.setItem('visitorSurveyDone', '1'); } catch (e) {}
-                        // Thank the visitor, then quietly close the card.
+                        // Thank this visitor, then close and come back for the next one.
                         promptRow.style.display = 'none';
                         formEl.style.display = 'none';
                         thanksEl.style.display = 'block';
-                        setTimeout(hideCard, 3500);
+                        setTimeout(function () {
+                            hideCard();
+                            scheduleNextAppearance(REAPPEAR_DELAY);
+                        }, THANKS_DISPLAY_TIME);
                     } else {
                         showError(data.message || 'حدث خطأ، الرجاء المحاولة مرة أخرى');
                         submitBtn.disabled = false;

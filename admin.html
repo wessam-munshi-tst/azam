@@ -133,6 +133,37 @@
             </button>
         </section>
 
+        <!-- Visitor Leads (name / phone / email collected from index page) -->
+        <section class="card">
+            <h2 class="card-title">بيانات الزوار (الاستبيان)</h2>
+            <p class="card-description">الأسماء وأرقام الهواتف والإيميلات التي عبّأها الزوار من صفحة الشات بوت</p>
+            <div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
+                <button class="btn btn-primary" id="refreshLeadsBtn" style="flex:1;min-width:120px;">
+                    🔄 تحديث القائمة
+                </button>
+                <a href="/admin/leads.csv" id="downloadLeadsBtn" download
+                   class="btn btn-toggle" style="flex:1;min-width:120px;text-align:center;text-decoration:none;">
+                    ⬇️ تنزيل CSV
+                </a>
+            </div>
+            <p id="leadsStatus" style="margin:0 0 10px;font-size:0.9rem;color:#636e72;"></p>
+            <div style="overflow-x:auto;">
+                <table id="leadsTable" style="width:100%;border-collapse:collapse;font-size:0.85rem;">
+                    <thead>
+                        <tr style="text-align:right;border-bottom:2px solid #dfe6e9;">
+                            <th style="padding:8px 6px;">التاريخ والوقت</th>
+                            <th style="padding:8px 6px;">الاسم</th>
+                            <th style="padding:8px 6px;">الهاتف</th>
+                            <th style="padding:8px 6px;">البريد الإلكتروني</th>
+                        </tr>
+                    </thead>
+                    <tbody id="leadsTableBody">
+                        <tr><td colspan="4" style="padding:12px 6px;color:#636e72;">اضغط "تحديث القائمة" لعرض البيانات</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
         <!-- Toast Notification -->
         <div id="toast" class="toast" role="alert"></div>
     </div>
@@ -207,5 +238,56 @@
                 statusEl.style.color = '#e17055';
             }
         });
+
+        // Visitor Leads
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = str == null ? '' : str;
+            return div.innerHTML;
+        }
+
+        function formatLeadTimestamp(iso) {
+            try {
+                const d = new Date(iso);
+                if (isNaN(d.getTime())) return iso;
+                return d.toLocaleString('ar-SA', { dateStyle: 'medium', timeStyle: 'short' });
+            } catch (e) {
+                return iso;
+            }
+        }
+
+        async function loadLeads() {
+            const statusEl = document.getElementById('leadsStatus');
+            const bodyEl = document.getElementById('leadsTableBody');
+            statusEl.textContent = 'جاري التحميل...';
+            statusEl.style.color = '#636e72';
+            try {
+                const res = await fetch('/admin/leads');
+                const data = await res.json();
+                const leads = data.leads || [];
+                if (!leads.length) {
+                    bodyEl.innerHTML = '<tr><td colspan="4" style="padding:12px 6px;color:#636e72;">لا توجد بيانات زوار بعد</td></tr>';
+                } else {
+                    bodyEl.innerHTML = leads.map(lead => `
+                        <tr style="border-bottom:1px solid #f1f2f6;">
+                            <td style="padding:8px 6px;white-space:nowrap;">${escapeHtml(formatLeadTimestamp(lead.timestamp))}</td>
+                            <td style="padding:8px 6px;">${escapeHtml(lead.name)}</td>
+                            <td style="padding:8px 6px;white-space:nowrap;">${escapeHtml(lead.phone)}</td>
+                            <td style="padding:8px 6px;">${escapeHtml(lead.email)}</td>
+                        </tr>
+                    `).join('');
+                }
+                statusEl.textContent = `إجمالي عدد الزوار: ${leads.length}`;
+                statusEl.style.color = '#00b894';
+            } catch (e) {
+                statusEl.textContent = 'حدث خطأ أثناء تحميل البيانات';
+                statusEl.style.color = '#e17055';
+            }
+        }
+
+        document.getElementById('refreshLeadsBtn').addEventListener('click', loadLeads);
+
+        // Load automatically when the admin panel opens
+        loadLeads();
     </script>
 </html>

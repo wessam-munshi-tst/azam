@@ -1087,6 +1087,7 @@ import re
 
 EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 LEADS_FILE = Path("visitor_leads.csv")
+LEADS_HEADER = ["timestamp", "name", "phone", "email"]
 
 
 class VisitorSurveyRequest(BaseModel):
@@ -1124,13 +1125,42 @@ async def submit_visitor_survey(request: VisitorSurveyRequest) -> VisitorSurveyR
         with LEADS_FILE.open("a", newline="", encoding="utf-8-sig") as f:
             writer = csv.writer(f)
             if not file_exists:
-                writer.writerow(["timestamp", "name", "phone", "email"])
+                writer.writerow(LEADS_HEADER)
             writer.writerow([datetime.now(timezone.utc).isoformat(), name, phone, email])
         logger.info(f"Visitor survey submitted: {name} / {phone} / {email}")
         return VisitorSurveyResponse(message="تم حفظ بياناتك بنجاح")
     except Exception as e:
         logger.error(f"Failed to save visitor survey: {e}")
         return VisitorSurveyResponse(status="error", message="حدث خطأ أثناء حفظ البيانات")
+
+
+@app.get("/admin/leads")
+async def admin_get_leads() -> JSONResponse:
+    """Return all visitor survey submissions collected so far, newest first."""
+    if not LEADS_FILE.exists():
+        return JSONResponse(content={"leads": []})
+
+    leads: list[dict] = []
+    try:
+        with LEADS_FILE.open("r", newline="", encoding="utf-8-sig") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                leads.append(row)
+    except Exception as e:
+        logger.error(f"Failed to read leads file: {e}")
+        return JSONResponse(status_code=500, content={"leads": [], "message": "تعذرت قراءة الملف"})
+
+    leads.reverse()
+    return JSONResponse(content={"leads": leads})
+
+
+@app.get("/admin/leads.csv")
+async def admin_download_leads_csv() -> FileResponse:
+    """Download the raw visitor_leads.csv file."""
+    from fastapi import HTTPException
+    if not LEADS_FILE.exists():
+        raise HTTPException(status_code=404, detail="لا يوجد بيانات بعد")
+    return FileResponse(LEADS_FILE, media_type="text/csv", filename="visitor_leads.csv")
 
 
 @app.post("/admin/show-image", response_model=AdminResponse)
