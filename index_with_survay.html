@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Robot Chatbot - Real-time voice interaction powered by AI">
+    <title>Robot Chatbot</title>
+    <link rel="preload" href="/static/style.css" as="style">
+    <link rel="preload" href="/static/app.js" as="script">
+    <link rel="preload" href="/static/sm.png" as="image">
+    <link rel="dns-prefetch" href="https://fonts.googleapis.com">
+    <link rel="dns-prefetch" href="https://fonts.gstatic.com">
+    <link rel="dns-prefetch" href="https://generativelanguage.googleapis.com">
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#ffffff">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" media="print" onload="this.media='all'">
+    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap"></noscript>
+</head>
+<body>
+    <button id="fullscreenBtn" aria-label="Toggle fullscreen mode">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#2d3436" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
+        </svg>
+    </button>
+
+    <div class="container">
+        <main>
+            <div class="logo-container">
+
+                <img src="/static/w.png" alt="Logo" class="logo" width="2000" height="2000">
+
+
+            </div>
+
+            <div class="visualizer-container" role="img" aria-label="Audio visualizer">
+                <canvas id="visualizer" aria-hidden="true"></canvas>
+            </div>
+        </main>
+    </div>
+
+    <!-- ====== Visitor Survey Card (non-blocking, appears while the chatbot is running) ====== -->
+    <div id="surveyCard" dir="rtl" lang="ar" style="display:none;position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);width:min(360px, calc(100vw - 32px));background:#ffffff;border-radius:16px;padding:20px 20px 18px;box-shadow:0 10px 40px rgba(0,0,0,0.35);z-index:9500;box-sizing:border-box;opacity:0;transition:opacity .4s ease, transform .4s ease;font-family:'Inter',sans-serif;">
+        <div id="surveyPromptRow" style="display:flex;align-items:flex-start;gap:8px;margin-bottom:14px;">
+            <span style="font-size:20px;line-height:1;">🤖</span>
+            <p style="margin:0;font-size:14px;color:#2d3436;">قبل أن نكمل، هل يمكنك تعبئة بياناتك بسرعة؟</p>
+            <button type="button" id="surveyDismissBtn" aria-label="إغلاق" style="margin-inline-start:auto;background:none;border:none;color:#b2bec3;font-size:16px;cursor:pointer;line-height:1;padding:0;">×</button>
+        </div>
+
+        <form id="surveyForm" novalidate>
+            <input type="text" id="surveyName" required maxlength="200" placeholder="الاسم"
+                style="width:100%;box-sizing:border-box;padding:10px 12px;margin-bottom:10px;border:1px solid #dfe6e9;border-radius:8px;font-size:14px;font-family:'Inter',sans-serif;">
+
+            <input type="tel" id="surveyPhone" required maxlength="50" placeholder="رقم الهاتف"
+                style="width:100%;box-sizing:border-box;padding:10px 12px;margin-bottom:10px;border:1px solid #dfe6e9;border-radius:8px;font-size:14px;font-family:'Inter',sans-serif;">
+
+            <input type="email" id="surveyEmail" required maxlength="200" placeholder="البريد الإلكتروني"
+                style="width:100%;box-sizing:border-box;padding:10px 12px;margin-bottom:8px;border:1px solid #dfe6e9;border-radius:8px;font-size:14px;font-family:'Inter',sans-serif;">
+
+            <p id="surveyError" style="display:none;color:#d63031;font-size:12px;margin:2px 0 10px;"></p>
+
+            <button type="submit" id="surveySubmitBtn"
+                style="width:100%;padding:11px;background:#2d3436;color:#fff;border:none;border-radius:8px;font-size:14px;font-family:'Inter',sans-serif;cursor:pointer;">
+                إرسال
+            </button>
+        </form>
+
+        <div id="surveyThanks" style="display:none;text-align:center;padding:6px 0;">
+            <span style="font-size:26px;display:block;margin-bottom:6px;">✅</span>
+            <p style="margin:0;font-size:14px;color:#2d3436;font-weight:600;">شكراً لك! تم استلام بياناتك بنجاح 🌟</p>
+        </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+    <script>
+        // ====== Visitor Survey Logic ======
+        // The site (and the audio chatbot session) works completely normally;
+        // this card appears repeatedly over time so many different visitors
+        // using the same device/session can each fill it in and be thanked.
+        (function () {
+            const cardEl = document.getElementById('surveyCard');
+            const formEl = document.getElementById('surveyForm');
+            const promptRow = document.getElementById('surveyPromptRow');
+            const errorEl = document.getElementById('surveyError');
+            const thanksEl = document.getElementById('surveyThanks');
+            const submitBtn = document.getElementById('surveySubmitBtn');
+            const dismissBtn = document.getElementById('surveyDismissBtn');
+            const nameInput = document.getElementById('surveyName');
+            const phoneInput = document.getElementById('surveyPhone');
+            const emailInput = document.getElementById('surveyEmail');
+
+            const FIRST_APPEARANCE_DELAY = 3000;   // first time, shortly after the page loads
+            const REAPPEAR_DELAY = 5000;          // how long to wait before asking the next visitor
+            const THANKS_DISPLAY_TIME = 3500;      // how long the thank-you message stays visible
+
+            function resetFormForNextVisitor() {
+                formEl.reset();
+                errorEl.style.display = 'none';
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'إرسال';
+                promptRow.style.display = 'flex';
+                formEl.style.display = 'block';
+                thanksEl.style.display = 'none';
+            }
+
+            function showCard() {
+                resetFormForNextVisitor();
+                cardEl.style.display = 'block';
+                requestAnimationFrame(() => {
+                    cardEl.style.opacity = '1';
+                    cardEl.style.transform = 'translateX(-50%) translateY(0)';
+                });
+            }
+
+            function scheduleNextAppearance(delay) {
+                setTimeout(showCard, delay);
+            }
+
+            function hideCard() {
+                cardEl.style.opacity = '0';
+                cardEl.style.transform = 'translateX(-50%) translateY(20px)';
+                setTimeout(() => { cardEl.style.display = 'none'; }, 400);
+            }
+
+            // Kick off the recurring cycle.
+            scheduleNextAppearance(FIRST_APPEARANCE_DELAY);
+
+            function showError(msg) {
+                errorEl.textContent = msg;
+                errorEl.style.display = 'block';
+            }
+
+            dismissBtn.addEventListener('click', function () {
+                hideCard();
+                // Still come back later to catch the next visitor.
+                scheduleNextAppearance(REAPPEAR_DELAY);
+            });
+
+            formEl.addEventListener('submit', async function (e) {
+                e.preventDefault();
+                errorEl.style.display = 'none';
+
+                const name = nameInput.value.trim();
+                const phone = phoneInput.value.trim();
+                const email = emailInput.value.trim();
+                const emailPattern = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+
+                if (!name || !phone || !email) {
+                    showError('الرجاء تعبئة جميع الحقول');
+                    return;
+                }
+                if (!emailPattern.test(email)) {
+                    showError('الرجاء إدخال بريد إلكتروني صحيح');
+                    return;
+                }
+
+                submitBtn.disabled = true;
+                submitBtn.textContent = 'جاري الإرسال...';
+
+                try {
+                    const res = await fetch('/api/visitor-survey', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ name, phone, email })
+                    });
+                    const data = await res.json();
+
+                    if (res.ok && data.status === 'ok') {
+                        // Thank this visitor, then close and come back for the next one.
+                        promptRow.style.display = 'none';
+                        formEl.style.display = 'none';
+                        thanksEl.style.display = 'block';
+                        setTimeout(function () {
+                            hideCard();
+                            scheduleNextAppearance(REAPPEAR_DELAY);
+                        }, THANKS_DISPLAY_TIME);
+                    } else {
+                        showError(data.message || 'حدث خطأ، الرجاء المحاولة مرة أخرى');
+                        submitBtn.disabled = false;
+                        submitBtn.textContent = 'إرسال';
+                    }
+                } catch (err) {
+                    showError('تعذر الاتصال بالخادم، الرجاء المحاولة مرة أخرى');
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'إرسال';
+                }
+            });
+        })();
+    </script>
+    <script>
+        // ====== Image Display System ======
+        let imageTimer = null;
+        let lastImageUrl = null;
+
+        const overlay = document.createElement('div');
+        overlay.id = 'imageOverlay';
+        Object.assign(overlay.style, {
+            display: 'none',
+            position: 'fixed',
+            top: '0', left: '0',
+            width: '100vw', height: '100vh',
+            backgroundColor: 'rgba(0,0,0,0.85)',
+            zIndex: '9999',
+            justifyContent: 'center',
+            alignItems: 'center',
+            flexDirection: 'column'
+        });
+
+        const img = document.createElement('img');
+        Object.assign(img.style, {
+            maxWidth: '90vw',
+            maxHeight: '85vh',
+            borderRadius: '16px',
+            boxShadow: '0 8px 40px rgba(0,0,0,0.6)',
+            objectFit: 'contain'
+        });
+
+        const progressBar = document.createElement('div');
+        Object.assign(progressBar.style, {
+            marginTop: '20px',
+            width: '300px',
+            height: '6px',
+            backgroundColor: 'rgba(255,255,255,0.2)',
+            borderRadius: '3px',
+            overflow: 'hidden'
+        });
+
+        const progressFill = document.createElement('div');
+        Object.assign(progressFill.style, {
+            height: '100%',
+            width: '100%',
+            backgroundColor: '#ffffff',
+            borderRadius: '3px',
+            transition: 'width 15s linear'
+        });
+
+        progressBar.appendChild(progressFill);
+        overlay.appendChild(img);
+        overlay.appendChild(progressBar);
+        document.body.appendChild(overlay);
+
+        function showImage(url) {
+            if (imageTimer) clearTimeout(imageTimer);
+            img.src = url;
+            overlay.style.display = 'flex';
+            // Animate progress bar
+            progressFill.style.transition = 'none';
+            progressFill.style.width = '100%';
+            setTimeout(() => {
+                progressFill.style.transition = 'width 15s linear';
+                progressFill.style.width = '0%';
+            }, 50);
+            imageTimer = setTimeout(() => {
+                overlay.style.display = 'none';
+                lastImageUrl = null;
+            }, 15000);
+        }
+
+        // Poll server every 2 seconds for new image commands
+        async function pollImage() {
+            try {
+                const res = await fetch('/admin/current-image');
+                const data = await res.json();
+                if (data.url && data.url !== lastImageUrl) {
+                    lastImageUrl = data.url;
+                    showImage(data.url);
+                }
+            } catch (e) {}
+        }
+
+        setInterval(pollImage, 2000);
+    </script>
+</body>
+</html>
